@@ -16,6 +16,12 @@ import pwndbg.gdblib.events
 import pwndbg.gdblib.symbol
 from pwndbg.commands import CommandCategory
 
+import pwndbg.lib.abi
+import pwndbg.gdblib.regs
+import pwndbg.gdblib.memory
+import pwndbg.gdblib.proc
+from pwndbg.color import message
+
 break_on_first_instruction = False
 
 
@@ -31,7 +37,7 @@ def on_start() -> None:
 # Starting from 3rd paragraph, the description is
 # taken from the GDB's `starti` command description
 parser = argparse.ArgumentParser(
-    formatter_class=RawTextHelpFormatter,
+    formatter_class=pwndbg.commands.RawTextArgsFormatter,
     description="""
 Start the debugged program stopping at the first convenient location
 from this list: main, _main, start, _start, init or _init.
@@ -80,7 +86,7 @@ def start(args=None) -> None:
 # Starting from 3rd paragraph, the description is
 # taken from the GDB's `starti` command description
 parser = argparse.ArgumentParser(
-    formatter_class=RawTextHelpFormatter,
+    formatter_class=pwndbg.commands.RawTextArgsFormatter,
     description="""
 Start the debugged program stopping at its entrypoint address.
 
@@ -110,7 +116,8 @@ parser.add_argument(
 def entry(args=[]) -> None:
     global break_on_first_instruction
     break_on_first_instruction = True
-    run = "run " + " ".join(map(quote, args))
+    #run = "run " + " ".join(map(quote, args))
+    run = "run " + args[0]
     gdb.execute(run, from_tty=False)
 
 
@@ -121,3 +128,80 @@ def entry(args=[]) -> None:
 def sstart() -> None:
     gdb.Breakpoint("__libc_start_main", temporary=True)
     gdb.execute("run")
+
+
+def run_until(addr=None, name=None):
+    if addr:
+        name = "*%#x" % addr
+    gdb.Breakpoint(name, temporary=True)
+    gdb.execute("continue", from_tty=False)
+
+parser = argparse.ArgumentParser(
+    formatter_class=pwndbg.commands.RawTextArgsFormatter,
+    description="""
+Break on the main function in a linux C binary.
+The 2 approaches used are:
+* Breaking on the 'main' symbol if it exists.
+* Breaking on '__libc_start_main' and finding main from the first argument.
+
+If the program isn't running, it will first break on entry.
+Otherwise it continues from the current point.
+""",
+)
+parser.add_argument("args", nargs="*", type=str, default=[], help="The arguments to run the binary with.")
+@pwndbg.commands.ArgparsedCommand(parser, category=CommandCategory.START)
+@pwndbg.commands.OnlyWithFile
+def bmain(args=[]):
+    if not pwndbg.gdblib.proc.alive:
+        # start on entry point
+        entry(args)
+        on_entry = True
+    else:
+        on_entry = False
+
+    # check if main is a symbol
+    main = pwndbg.gdblib.symbol.address("main")
+    if main:
+        gdb.set_convenience_variable("main", main)
+        run_until(name="main")
+        return
+
+    # attempt to break on __libc_start_main
+    # first argument passed to __libc_start_main is main
+    start_main = pwndbg.gdblib.symbol.address("__libc_start_main")
+    if start_main:
+        run_until(addr=start_main)
+    else:
+        # __libc_start_main doesn't exist
+        print(message.warn("__libc_start_main wasn't found!"))
+        if on_entry:
+            print(message.warn("Currently at Entry Point"))
+        return
+
+    # get calling convention
+    abi = pwndbg.lib.abi.ABI.default()
+    if abi is None:
+        # ABI wasn't found
+        # unlikely to happen
+        print(message.warn("Process' ABI wasn't found!"))
+        print(message.warn("Currently at __libc_start_main"))
+        print(message.warn("main will be the first argument!"))
+        return
+    # get first argument of __libc_start_main()
+    regs = abi.register_arguments
+    if len(regs) > 0:
+        # first argument will be in the first register
+        first = abi.register_arguments[0]
+        main = getattr(pwndbg.gdblib.regs, first)
+    else:
+        # ABI doesn't use registers for arguments
+        # must use stack for all arguments (likely i386)
+        main = pwndbg.gdblib.memory.u(pwndbg.gdblib.regs.sp + pwndbg.gdblib.arch.ptrsize)
+
+
+    if main:
+        gdb.set_convenience_variable("main", main)
+        run_until(addr=main)
+    else:
+        print(message.error("Unexpected error, main not found!"))
+        print(message.warn("Currently at __libc_start_main"))

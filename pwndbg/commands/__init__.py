@@ -30,6 +30,12 @@ T = TypeVar("T")
 commands: List[Command] = []
 command_names: Set[str] = set()
 
+# placeholder class used in start commands like entry and bmain
+# so that the raw text inputted as arguments can be passed to run
+# allowing for pipes
+class RawTextArgsFormatter(argparse.RawTextHelpFormatter):
+    pass
+
 
 class CommandCategory(str, Enum):
     START = "Start"
@@ -525,7 +531,13 @@ class _ArgparsedCommand(Command):
         )
 
     def split_args(self, argument: str):
-        argv = gdb.string_to_argv(argument)
+        # admittedly an ugly patch, but it allows us to pass raw args
+        # from one command to another
+        # Ex. bmain -> run or entry -> run
+        if self.parser.formatter_class is RawTextArgsFormatter:
+            argv = [argument]
+        else:
+            argv = gdb.string_to_argv(argument)
         return tuple(), vars(self.parser.parse_args(argv))
 
 
