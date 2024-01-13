@@ -183,6 +183,18 @@ def string(addr: int, max: int = 4096) -> bytearray:
 
     return bytearray()
 
+def strlen(addr):
+    c = 0
+    while peek(addr):
+        page = pwndbg.lib.memory.page_align(addr)
+        size = PAGE_SIZE - (addr - page)
+        buf = read(addr, size)
+        index = buf.find(b"\x00")
+        if index != -1:
+            return c+index
+        c += size
+        addr = page+PAGE_SIZE
+    return c
 
 def byte(addr: int) -> int:
     """byte(addr) -> int

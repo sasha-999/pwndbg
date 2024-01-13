@@ -12,6 +12,11 @@ from pwndbg.color import ColorParamSpec
 from pwndbg.color import ljust_colored
 from pwndbg.color.message import on
 
+import pwndbg.gdblib.memory
+import pwndbg.gdblib.strings
+from pwndbg.color import light_green
+import gdb
+
 capstone_branch_groups = {capstone.CS_GRP_CALL, capstone.CS_GRP_JUMP}
 
 c = ColorConfig(
@@ -76,6 +81,17 @@ def instruction(ins):
     # Style the instruction mnemonic if it's a branch instruction.
     if is_branch:
         asm = asm.replace(ins.mnemonic, c.branch(ins.mnemonic), 1)
+
+    for op in ins.operands[::-1]:
+        addr = op.int
+        if addr:
+            length = pwndbg.gdblib.memory.strlen(addr)
+            if length == 0:
+                continue
+            string = pwndbg.gdblib.strings.get(addr, maxlen=0, maxread=length+1)
+            if string:
+                asm = "%s %s" % (ljust_colored(asm, 36), light_green(gdb.Value(string)))
+                break
 
     # If we know the conditional is taken, mark it as taken.
     if ins.condition is None:
