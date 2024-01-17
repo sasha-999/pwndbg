@@ -880,14 +880,21 @@ group.add_argument(
     default=False,
     help=" Display all chunks (Ignore the default-visualize-chunk-number configuration).",
 )
-
+parser.add_argument(
+    "--start",
+    "-s",
+    type=lambda n: max(int(n,0),0),
+    default=0,
+    help="Index of chunk to start from"
+)
 
 @pwndbg.commands.ArgparsedCommand(parser, category=CommandCategory.HEAP)
 @pwndbg.commands.OnlyWithResolvedHeapSyms
 @pwndbg.commands.OnlyWhenHeapIsInitialized
 @pwndbg.commands.OnlyWhenUserspace
 def vis_heap_chunks(
-    addr=None, count=None, beyond_top=None, no_truncate=None, all_chunks=None
+    addr=None, count=None, beyond_top=None, no_truncate=None, all_chunks=None,
+    start=None
 ) -> None:
     """Visualize chunks on a heap, default to the current arena's active heap."""
     allocator = pwndbg.heap.current
@@ -914,7 +921,7 @@ def vis_heap_chunks(
 
     chunk_id = 0
     while True:
-        if not all_chunks and chunk_id == count + 1:
+        if not all_chunks and chunk_id == start + count + 1:
             break
 
         # Don't read beyond the heap mapping if --beyond_top or corrupted heap.
@@ -966,7 +973,18 @@ def vis_heap_chunks(
     asc = ""
     labels = []
 
-    cursor = cursor_backup
+    # chunk_delims[-1] is the end of top_chunk
+    # which doesn't point to a valid chunk
+    if start < len(chunk_delims)-1:
+        # chunk_delim point to the ends of each chunk
+        # which means it points to 'size' field of the next chunk
+        # NOT prev_size, which is the true starting point
+        cursor = chunk_delims[start] - pwndbg.gdblib.arch.ptrsize
+    else:
+        print(message.error("Starting chunk index was out of range"))
+        return
+
+    #cursor = cursor_backup
     chunk = Chunk(cursor)
 
     has_huge_chunk = False
@@ -980,7 +998,7 @@ def vis_heap_chunks(
 
     bin_labels_map: dict[int, list[str]] = bin_labels_mapping(bin_collections)
 
-    for c, stop in enumerate(chunk_delims):
+    for c, stop in enumerate(chunk_delims[start:], start=start):
         color_func = color_funcs[c % len(color_funcs)]
 
         if stop - cursor > 0x10000:
