@@ -32,3 +32,9 @@ def get_got_entry(local_path: str) -> Dict[RelocationType, list[str]]:
             if c.name in category:
                 entries[c].append(line)
     return entries
+
+@pwndbg.wrappers.OnlyWithCommand(cmd_name)
+def check_if_symbol_exists(exe, symbol):
+    cmd = check_if_symbol_exists.cmd + ["-Ws", exe]
+    readelf_out = pwndbg.wrappers.call_cmd(cmd)
+    return symbol in readelf_out
