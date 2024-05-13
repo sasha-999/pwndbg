@@ -5,6 +5,7 @@ vice-versa.
 Uses IDA when available if there isn't sufficient symbol
 information available.
 """
+
 from __future__ import annotations
 
 import re
@@ -44,7 +45,7 @@ skipped_exceptions = (
 )
 
 
-def _get_debug_file_directory():
+def _get_debug_file_directory() -> str:
     """
     Retrieve the debug file directory path.
 
@@ -83,6 +84,8 @@ def get(address: int, gdb_only=False) -> str:
     """
     Retrieve the name for the symbol located at `address` - either from GDB or from IDA sync
     Passing `gdb_only=True`
+
+    Empty string if no symbol
     """
     # Note: we do not return "" on `address < pwndbg.gdblib.memory.MMAP_MIN_ADDR`
     # because this may be used to find out the symbol name on PIE binaries that weren't started yet
@@ -93,7 +96,11 @@ def get(address: int, gdb_only=False) -> str:
         return ""
 
     # This sucks, but there's not a GDB API for this.
-    result = gdb.execute("info symbol %#x" % int(address), to_string=True, from_tty=False)
+    # Workaround for a bug with Rust language, see #2094
+    try:
+        result = gdb.execute(f"info symbol 0x{address:x}", to_string=True, from_tty=False)
+    except gdb.error:
+        return ""
 
     if not gdb_only and result.startswith("No symbol"):
         address = int(address)

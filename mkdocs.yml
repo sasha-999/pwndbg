@@ -1,3 +1,4 @@
+site_url: https://pwndbg.re/pwndbg/
 site_name: Documentation
 site_description: >-
   pwndbg (/paʊnˈdiˌbʌɡ/) is a GDB plug-in that makes debugging with GDB suck less, with a focus on features needed by low-level software developers, hardware hackers, reverse-engineers and exploit developers.
@@ -8,14 +9,11 @@ repo_url: https://github.com/pwndbg/pwndbg/
 theme:
   logo: assets/icon.png
   name: material
-  custom_dir: docs/theme
   font:
     text: Roboto
     code: Roboto Mono
   features:
     # - navigation.footer
-    - content.action.edit
-    - content.action.view
     - content.code.annotate
     - content.code.annotate
     - content.code.copy
@@ -31,14 +29,13 @@ theme:
     - search.suggest
     - toc.integrate
     - toc.follow
-  palette: 
+  palette:
     scheme: slate
     primary: black
     accent: purple
 
   favicon: assets/favicon.ico
-  icon:
-    logo:logo
+  icon: logo:logo
 
 # Plugins
 plugins:
@@ -47,13 +44,12 @@ plugins:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
   - minify:
       minify_html: true
-  - git-committers:
-      repository: pwndbg/pwndbg
-      branch: dev
-      exclude:
-        - index.md
-        - docs/source/**
-        - docs/commands/**
+  # - git-committers:
+  #     repository: pwndbg/pwndbg
+  #     branch: dev
+  #     exclude:
+  #       - index.md
+  #       - docs/commands/**
   - gen-files:
       scripts:
         - scripts/gen_ref_pages.py
@@ -61,7 +57,7 @@ plugins:
       default_handler: python
       handlers:
         python:
-          paths: [pwndbg]
+          paths: []
           # load_external_modules: true
           options:
             allow_inspection: true
@@ -79,8 +75,13 @@ plugins:
             show_docstring_parameters: true
             show_docstring_return: true
             show_docstring_raises: true
-
-
+  - rss:
+      match_path: blog/posts/.*
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
 
 # Additional configuration
 extra:
@@ -111,6 +112,7 @@ markdown_extensions:
   - fenced_code
   - toc:
       permalink: true
+      toc_depth: "1-2"
   - pymdownx.arithmatex:
       generic: true
   - pymdownx.betterem:
@@ -153,12 +155,12 @@ markdown_extensions:
       custom_checkbox: true
   - pymdownx.tilde
 
-nav: 
+nav:
   - Home: index.md
   # - Getting started: getting_started.md
-  # - Setup: setup.md
+  - Setup: setup.md
   # - Features: features.md
   - Commands: commands/index.md
   - Source: source/index.md
   # - FAQ: faq.md
-  # - Blog: blog/index.md
+  - Blog: blog/index.md

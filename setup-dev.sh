@@ -28,12 +28,14 @@ exit $exit_code
 EOF
 )
 
-if [ -t 1 ]; then
+if [ -t 1 ] && [ ! -f $hook_script_path ]; then
     echo "Install a git hook to automatically lint files before pushing? (y/N)"
     read yn
     if [[ "$yn" == [Yy]* ]]; then
         echo "$hook_script" > "$hook_script_path"
-        echo "pre-push hook installed to $hook_script_path"
+        # make the hook executable
+        chmod ug+x "$hook_script_path"
+        echo "pre-push hook installed to $hook_script_path and made executable"
     fi
 fi
 
@@ -100,7 +102,7 @@ install_apt() {
         gcc-aarch64-linux-gnu \
         gcc-riscv64-linux-gnu
 
-    if [[ "$1" == "22.04" ]]; then
+    if [[ "$1" != "" && "$1" != "20.04" ]]; then
         sudo apt install shfmt
     fi
 
@@ -154,6 +156,28 @@ EOF
     download_zig_binary
 }
 
+install_dnf() {
+    set_zigpath "$(pwd)/.zig"
+
+    sudo dnf upgrade || true
+    sudo dnf install -y \
+        nasm \
+        gcc \
+        curl \
+        gdb \
+        parallel \
+        qemu-system-arm \
+        qemu-user
+
+    command -v go &> /dev/null || sudo dnf install -y go
+
+    if [[ "$1" != "" ]]; then
+        sudo dnf install shfmt
+    fi
+
+    download_zig_binary
+}
+
 if linux; then
     distro=$(
         . /etc/os-release
@@ -170,6 +194,13 @@ if linux; then
             ;;
         "arch")
             install_pacman
+            ;;
+        "fedora")
+            fedora_version=$(
+                . /etc/os-release
+                echo ${VERSION_ID} version
+            )
+            install_dnf $fedora_verion
             ;;
         *) # we can add more install command for each distros.
             echo "\"$distro\" is not supported distro. Will search for 'apt' or 'pacman' package managers."
@@ -188,6 +219,12 @@ if linux; then
         PWNDBG_VENV_PATH="./.venv"
     fi
     echo "Using virtualenv from path: ${PWNDBG_VENV_PATH}"
-    PYTHON=${PWNDBG_VENV_PATH}/bin/python
-    ${PYTHON} -m pip install -r dev-requirements.txt
+
+    # Install poetry if not already installed
+    if ! hash poetry 2> /dev/null; then
+        curl -sSL https://install.python-poetry.org | python3 -
+    fi
+
+    source "${PWNDBG_VENV_PATH}/bin/activate"
+    ~/.local/bin/poetry install --with dev
 fi

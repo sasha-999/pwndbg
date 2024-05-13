@@ -5,17 +5,15 @@ import gdb
 import pwndbg
 
 
-def test_command_kbase():
-    pass  # TODO
-
-
 def test_command_kchecksec():
     res = gdb.execute("kchecksec", to_string=True)
+    assert res != ""  # for F841 warning
     # TODO: do something with res
 
 
 def test_command_kcmdline():
     res = gdb.execute("kcmdline", to_string=True)
+    assert res != ""  # for F841 warning
     # TODO: do something with res
 
 

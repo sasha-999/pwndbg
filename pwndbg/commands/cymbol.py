@@ -22,6 +22,8 @@ import os
 import subprocess
 import sys
 import tempfile
+from typing import Callable
+from typing import TypeVar
 
 import gdb
 
@@ -31,6 +33,8 @@ import pwndbg.gdblib.arch
 import pwndbg.lib.gcc
 import pwndbg.lib.tempfile
 from pwndbg.color import message
+
+T = TypeVar("T")
 
 gcc_compiler_path = pwndbg.gdblib.config.add_param(
     "gcc-compiler-path",
@@ -60,13 +64,13 @@ def unload_loaded_symbol(custom_structure_name: str) -> None:
         loaded_symbols.pop(custom_structure_name)
 
 
-def OnlyWhenStructFileExists(func):
+def OnlyWhenStructFileExists(func: Callable[..., T]) -> Callable[..., T]:
     @functools.wraps(func)
-    def wrapper(custom_structure_name):
+    def wrapper(custom_structure_name: str) -> T | None:
         pwndbg_custom_structure_path = os.path.join(pwndbg_cachedir, custom_structure_name) + ".c"
         if not os.path.exists(pwndbg_custom_structure_path):
             print(message.error("No custom structure was found with the given name!"))
-            return
+            return None
         return func(custom_structure_name, pwndbg_custom_structure_path)
 
     return wrapper
@@ -187,10 +191,7 @@ def load_custom_structure(custom_structure_name: str, custom_structure_path: str
     pwndbg_debug_symbols_output_file = generate_debug_symbols(custom_structure_path)
     if not pwndbg_debug_symbols_output_file:
         return  # generate_debug_symbols prints on failures
-    # Old GDB versions (e.g. 8.2) requires addr argument in add-symbol-file
-    # we set that address to which to load the symbols to 0 since it doesn't matter here
-    # (because we are only loading types information)
-    gdb.execute(f"add-symbol-file {pwndbg_debug_symbols_output_file} 0", to_string=True)
+    gdb.execute(f"add-symbol-file {pwndbg_debug_symbols_output_file}", to_string=True)
     loaded_symbols[custom_structure_name] = pwndbg_debug_symbols_output_file
     print(message.success("Symbols are loaded!"))
 

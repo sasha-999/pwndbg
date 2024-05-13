@@ -155,7 +155,7 @@ def break_next_call(symbol_regex=None):
         if (
             not symbol_regex
             or (ins.target_const and symbol_regex.match(hex(ins.target)))
-            or (ins.symbol and symbol_regex.match(ins.symbol))
+            or (ins.target_string and symbol_regex.match(ins.target_string))
         ):
             return ins
 
@@ -246,7 +246,7 @@ def break_on_program_code() -> bool:
         if proc.stopped_with_signal:
             return False
 
-        o = gdb.execute("si", from_tty=False, to_string=True)
+        gdb.execute("si", from_tty=False, to_string=True)
 
         for start, end in binary_exec_page_ranges:
             if start <= regs.pc < end:

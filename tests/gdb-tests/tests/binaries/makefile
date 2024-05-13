@@ -38,7 +38,7 @@ GLIBC_2_33=$(PWD)/glibcs/2.33
 
 .PHONY : all clean
 
-CUSTOM_TARGETS = reference_bin_pie.out reference_bin_nopie.out symbol_1600_and_752.out initialized_heap_x64.out initialized_heap_i386_big.out linked_lists.out
+CUSTOM_TARGETS = reference_bin_pie.out reference_bin_nopie.out reference_bin_nopie.i386.out symbol_1600_and_752.out initialized_heap_x64.out initialized_heap_i386_big.out linked_lists.out onegadget.x86-64.out onegadget.i386.out
 
 all: $(LINKED) $(LINKED_ASM) $(COMPILED_GO) $(CUSTOM_TARGETS)
 
@@ -130,6 +130,20 @@ initialized_heap_x64.out: initialized_heap.c
 	-target x86_64-linux-gnu \
 	-o initialized_heap_x64.out initialized_heap.c
 
+onegadget.x86-64.out: onegadget.c
+	@echo "[+] Building onegadget.x86-64.out"
+	${ZIGCC} \
+	${CFLAGS} \
+	-target x86_64-linux-gnu \
+	-o onegadget.x86-64.out onegadget.c
+
+onegadget.i386.out: onegadget.c
+	@echo "[+] Building onegadget.i386.out"
+	${ZIGCC} \
+	${CFLAGS} \
+	-target i386-linux-gnu \
+	-o onegadget.i386.out onegadget.c
+
 clean :
 	@echo "[+] Cleaning stuff"
 	@rm -f $(COMPILED) $(LINKED) $(COMPILED_ASM) $(LINKED_ASM) $(COMPILED_GO) *.out *.o
@@ -145,6 +159,10 @@ reference_bin_pie.out: reference-binary.c
 reference_bin_nopie.out: reference-binary.c
 	@echo "[+] Building reference_bin_nopie.out"
 	${ZIGCC} -fno-pie -o reference_bin_nopie.out reference-binary.c
+
+reference_bin_nopie.i386.out: reference-binary.c
+	@echo "[+] Building reference_bin_nopie.i386.out"
+	${ZIGCC} -fpie -target i386-linux-gnu -o reference_bin_nopie.i386.out reference-binary.c
 
 symbol_1600_and_752.out: symbol_1600_and_752.cpp
 	${CXX} -O0 -ggdb -Wno-pmf-conversions symbol_1600_and_752.cpp -o symbol_1600_and_752.out

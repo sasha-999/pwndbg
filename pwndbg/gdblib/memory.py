@@ -2,10 +2,11 @@
 Reading, writing, and describing memory.
 """
 
-
 from __future__ import annotations
 
 import re
+from typing import Dict
+from typing import Union
 
 import gdb
 
@@ -17,6 +18,9 @@ import pwndbg.lib.cache
 import pwndbg.lib.memory
 from pwndbg.lib.memory import PAGE_MASK
 from pwndbg.lib.memory import PAGE_SIZE
+
+GdbDict = Dict[str, Union["GdbDict", int]]
+
 
 MMAP_MIN_ADDR = 0x8000
 
@@ -44,15 +48,14 @@ def read(addr: int, count: int, partial: bool = False) -> bytearray:
         if not partial:
             raise
 
-        if not hasattr(e, "message"):
-            e.message = str(e)
+        message = str(e)
 
         stop_addr = addr
-        match = re.search(r"Memory at address (\w+) unavailable\.", e.message)
+        match = re.search(r"Memory at address (\w+) unavailable\.", message)
         if match:
             stop_addr = int(match.group(1), 0)
         else:
-            stop_addr = int(e.message.split()[-1], 0)
+            stop_addr = int(message.split()[-1], 0)
 
         if stop_addr != addr:
             return read(addr, stop_addr - addr)
@@ -107,7 +110,7 @@ def write(addr: int, data: str | bytes | bytearray) -> None:
     gdb.selected_inferior().write_memory(addr, data)
 
 
-def peek(address: int):
+def peek(address: int) -> str | None:
     """peek(address) -> str
 
     Read one byte from the specified address.
@@ -120,7 +123,7 @@ def peek(address: int):
         address cannot be read.
     """
     try:
-        return read(address, 1)
+        return chr(read(address, 1)[0])
     except Exception:
         pass
     return None
@@ -174,7 +177,7 @@ def string(addr: int, max: int = 4096) -> bytearray:
         An empty bytearray, or a NULL-terminated bytearray.
     """
     if peek(addr):
-        data = bytearray(read(addr, max, partial=True))
+        data = read(addr, max, partial=True)
 
         try:
             return data[: data.index(b"\x00")]
@@ -268,7 +271,7 @@ def u64(addr: int) -> int:
     return readtype(pwndbg.gdblib.typeinfo.uint64, addr)
 
 
-def u(addr: int, size: int | None = None):
+def u(addr: int, size: int | None = None) -> int:
     """u(addr, size=None) -> int
 
     Read one ``unsigned`` integer from the specified address,
@@ -374,3 +377,55 @@ def update_min_addr() -> None:
     global MMAP_MIN_ADDR
     if pwndbg.gdblib.qemu.is_qemu_kernel():
         MMAP_MIN_ADDR = 0
+
+
+def fetch_struct_as_dictionary(
+    struct_name: str,
+    struct_address: int,
+    include_only_fields: set[str] = set(),
+    exclude_fields: set[str] = set(),
+) -> GdbDict:
+    struct_type = gdb.lookup_type("struct " + struct_name)
+    fetched_struct = poi(struct_type, struct_address)
+
+    return pack_struct_into_dictionary(fetched_struct, include_only_fields, exclude_fields)
+
+
+def pack_struct_into_dictionary(
+    fetched_struct: gdb.Value,
+    include_only_fields: set[str] = set(),
+    exclude_fields: set[str] = set(),
+) -> GdbDict:
+    struct_as_dictionary = {}
+
+    if len(include_only_fields) != 0:
+        for field_name in include_only_fields:
+            key = field_name
+            value = convert_gdb_value_to_python_value(fetched_struct[field_name])
+            struct_as_dictionary[key] = value
+    else:
+        for field in fetched_struct.type.fields():
+            if field.name is None:
+                # Flatten anonymous structs/unions
+                anon_type = convert_gdb_value_to_python_value(fetched_struct[field])
+                assert isinstance(anon_type, dict)
+                struct_as_dictionary.update(anon_type)
+            elif field.name not in exclude_fields:
+                key = field.name
+                value = convert_gdb_value_to_python_value(fetched_struct[field])
+                struct_as_dictionary[key] = value
+
+    return struct_as_dictionary
+
+
+def convert_gdb_value_to_python_value(gdb_value: gdb.Value) -> int | GdbDict:
+    gdb_type = gdb_value.type.strip_typedefs()
+
+    if gdb_type.code == gdb.TYPE_CODE_PTR:
+        return int(gdb_value)
+    elif gdb_type.code == gdb.TYPE_CODE_INT:
+        return int(gdb_value)
+    elif gdb_type.code == gdb.TYPE_CODE_STRUCT:
+        return pack_struct_into_dictionary(gdb_value)
+
+    raise NotImplementedError

@@ -2,6 +2,7 @@
 Launches the target process after setting a breakpoint at a convenient
 entry point.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -75,7 +76,7 @@ def start(args=None) -> None:
         if not address:
             continue
 
-        b = gdb.Breakpoint(symbol, temporary=True)
+        gdb.Breakpoint(symbol, temporary=True)
         gdb.execute(run, from_tty=False, to_string=True)
         return
 

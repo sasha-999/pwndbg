@@ -33,13 +33,12 @@ def which(arch: Arch) -> List[str]:
     return [gcc] + _flags(arch.name)
 
 
-def _which_binutils(util: str, arch: Arch, **kwargs: Any):
+def _which_binutils(util: str, arch: Arch, **kwargs: Any) -> str | None:
     ###############################
     # Borrowed from pwntools' code
     ###############################
 
     arch_name = arch.name
-    bits = arch.ptrsize
 
     # Fix up binjitsu vs Debian triplet naming, and account
     # for 'thumb' being its own binjitsu architecture.
@@ -74,6 +73,8 @@ def _which_binutils(util: str, arch: Arch, **kwargs: Any):
                 res = sorted(glob.glob(os.path.join(dir, pattern)))
                 if res:
                     return res[0]
+
+    return None
 
 
 def _flags(arch_name: str) -> List[str]:

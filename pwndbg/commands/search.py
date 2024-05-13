@@ -6,8 +6,12 @@ import codecs
 import os
 import struct
 
+import gdb
+import pwnlib
+
 import pwndbg.color.memory as M
 import pwndbg.commands
+import pwndbg.disasm
 import pwndbg.enhance
 import pwndbg.gdblib.arch
 import pwndbg.gdblib.config
@@ -56,7 +60,7 @@ By default search results are cached. If you want to cache all results, but only
 parser.add_argument(
     "-t",
     "--type",
-    choices=["byte", "short", "word", "dword", "qword", "pointer", "string", "bytes"],
+    choices=["byte", "short", "word", "dword", "qword", "pointer", "string", "bytes", "asm"],
     help="Size of search target",
     default="bytes",
     type=str,
@@ -101,6 +105,22 @@ parser.add_argument(
     action="store_const",
     const="pointer",
     help="Search for a pointer-width integer",
+)
+parser.add_argument(
+    "--asm",
+    dest="type",
+    action="store_const",
+    const="asm",
+    help="Search for an assembly instruction",
+)
+parser.add_argument(
+    "--arch",
+    choices=pwnlib.context.context.architectures.keys(),
+    type=str,
+    help="Target architecture",
+)
+parser.add_argument(
+    "--asmbp", action="store_true", help="Set breakpoint for found assembly instruction"
 )
 parser.add_argument(
     "-x", "--hex", action="store_true", help="Target is a hex-encoded (for bytes/strings)"
@@ -158,6 +178,8 @@ parser.add_argument(
 @pwndbg.commands.OnlyWhenRunning
 def search(
     type,
+    arch,
+    asmbp,
     hex,
     executable,
     writable,
@@ -177,6 +199,9 @@ def search(
         )
         next = False
         save = True
+
+    if not arch:
+        arch = pwnlib.context.context.arch
 
     # Adjust pointer sizes to the local architecture
     if type == "pointer":
@@ -201,7 +226,7 @@ def search(
     if limit:
         limit = pwndbg.commands.fix_int(limit)
     # Convert to an integer if needed, and pack to bytes
-    if type not in ("string", "bytes"):
+    if type not in ("string", "bytes", "asm"):
         value = pwndbg.commands.fix_int(value)
         value &= pwndbg.gdblib.arch.ptrmask
         fmt = {"little": "<", "big": ">"}[pwndbg.gdblib.arch.endian] + {
@@ -223,6 +248,10 @@ def search(
         value = value.encode()
         value += b"\x00"
 
+    elif type == "asm" or asmbp:
+        bits_for_arch = pwnlib.context.context.architectures.get(arch, {}).get("bits")
+        value = pwnlib.asm.asm(value, arch=arch, bits=bits_for_arch)
+
     # Find the mappings that we're looking for
     mappings = pwndbg.gdblib.vmmap.get()
 
@@ -234,7 +263,11 @@ def search(
         return
 
     # If next is passed, only perform a manual search over previously saved addresses
-    print("Searching for value: " + repr(value))
+    if type == "asm" or asmbp:
+        print("Searching for instruction (assembled value): " + repr(value))
+    else:
+        print("Searching for value: " + repr(value))
+
     if next:
         val_len = len(value)
         new_saved = set()
@@ -272,6 +305,9 @@ def search(
     ):
         if save:
             saved.add(address)
+        if asmbp:
+            # set breakpoint on the instruction
+            gdb.Breakpoint("*%#x" % address, temporary=False)
 
         if not trunc_out or i < 20:
             print_search_hit(address)

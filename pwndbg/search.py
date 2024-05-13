@@ -4,8 +4,8 @@ Search the address space for byte patterns.
 
 from __future__ import annotations
 
+from typing import Collection
 from typing import Generator
-from typing import Tuple
 
 import gdb
 
@@ -17,7 +17,7 @@ import pwndbg.gdblib.vmmap
 
 def search(
     searchfor: bytes,
-    mappings: Tuple[pwndbg.lib.memory.Page, ...] | None = None,
+    mappings: Collection[pwndbg.lib.memory.Page] | None = None,
     start: int | None = None,
     end: int | None = None,
     step: int | None = None,
@@ -70,6 +70,9 @@ def search(
         start = vmmap.start
         end = vmmap.end
 
+        if limit and found_count >= limit:
+            break
+
         while True:
             # No point in searching if we can't read the memory
             if not pwndbg.gdblib.memory.peek(start):
@@ -114,7 +117,7 @@ def search(
 
             yield start
             found_count += 1
-            if limit and found_count == limit:
+            if limit and found_count >= limit:
                 break
 
             if step is not None:

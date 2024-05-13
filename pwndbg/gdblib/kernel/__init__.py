@@ -5,6 +5,10 @@ import math
 import re
 from abc import ABC
 from abc import abstractmethod
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import List
 from typing import Optional
 from typing import Tuple
 
@@ -12,9 +16,11 @@ import gdb
 
 import pwndbg.color.message as M
 import pwndbg.gdblib.memory
+import pwndbg.gdblib.regs
 import pwndbg.gdblib.symbol
 import pwndbg.lib.cache
 import pwndbg.lib.kernel.kconfig
+import pwndbg.lib.kernel.structs
 
 _kconfig: pwndbg.lib.kernel.kconfig.Kconfig = None
 
@@ -34,8 +40,8 @@ def has_debug_syms() -> bool:
 
 
 # NOTE: This implies requires_debug_syms(), as it is needed for kconfig() to return non-None
-def requires_kconfig(default=None):
-    def decorator(f):
+def requires_kconfig(default: Any = None) -> Callable[..., Any]:
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(f)
         def func(*args, **kwargs):
             if kconfig():
@@ -53,8 +59,8 @@ def requires_kconfig(default=None):
     return decorator
 
 
-def requires_debug_syms(default=None):
-    def decorator(f):
+def requires_debug_syms(default: Any = None) -> Callable[..., Any]:
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(f)
         def func(*args, **kwargs):
             if has_debug_syms():
@@ -130,6 +136,58 @@ def is_kaslr_enabled() -> bool:
         return False
 
     return "nokaslr" not in kcmdline()
+
+
+@pwndbg.lib.cache.cache_until("start")
+def kbase() -> int | None:
+    arch_name = pwndbg.gdblib.arch.name
+
+    address = 0
+
+    if arch_name == "x86-64":
+        address = get_idt_entries()[0].offset
+    elif arch_name == "aarch64":
+        address = pwndbg.gdblib.regs.vbar
+    else:
+        return None
+
+    mappings = pwndbg.gdblib.vmmap.get()
+    for mapping in mappings:
+        # TODO: Check alignment
+
+        # only search in kernel mappings:
+        # https://www.kernel.org/doc/html/v5.3/arm64/memory.html
+        if mapping.vaddr & (0xFFFF << 48) == 0:
+            continue
+
+        if not mapping.execute:
+            continue
+
+        if address in mapping:
+            return mapping.vaddr
+
+    return None
+
+
+def get_idt_entries() -> List[pwndbg.lib.kernel.structs.IDTEntry]:
+    """
+    Retrieves the IDT entries from memory.
+    """
+    base = pwndbg.gdblib.regs.idt
+    limit = pwndbg.gdblib.regs.idt_limit
+
+    size = pwndbg.gdblib.arch.ptrsize * 2
+    num_entries = (limit + 1) // size
+
+    entries = []
+
+    # TODO: read the entire IDT in one call?
+    for i in range(num_entries):
+        entry_addr = base + i * size
+        entry = pwndbg.lib.kernel.structs.IDTEntry(pwndbg.gdblib.memory.read(entry_addr, size))
+        entries.append(entry)
+
+    return entries
 
 
 class ArchOps(ABC):
@@ -229,7 +287,7 @@ class i386Ops(x86Ops):
     def __init__(self) -> None:
         # https://elixir.bootlin.com/linux/v6.2/source/arch/x86/include/asm/page_32_types.h#L18
         self._PAGE_OFFSET = int(kconfig()["CONFIG_PAGE_OFFSET"], 16)
-        self.START_KERNEL_map = self.PAGE_OFFSET
+        self.START_KERNEL_map = self._PAGE_OFFSET
 
     @property
     def ptr_size(self) -> int:
