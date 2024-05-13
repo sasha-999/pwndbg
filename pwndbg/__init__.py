@@ -56,6 +56,8 @@ handle SIGALRM nostop print nopass
 handle SIGBUS  stop   print nopass
 handle SIGPIPE nostop print nopass
 handle SIGSEGV stop   print nopass
+alias afl = info functions
+alias disas = disassemble
 """.strip()
 
 # See https://github.com/pwndbg/pwndbg/issues/808
