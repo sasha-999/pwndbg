@@ -74,5 +74,4 @@ def syntax_highlight(code: str, filename: str = ".asm") -> str:
         lexer_cache[filename] = lexer
 
         code = pygments.highlight(code, lexer, formatter).rstrip()
-
     return code

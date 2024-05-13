@@ -152,7 +152,8 @@ def nearpc(
         symbols = ljust_padding(symbols)
         addresses = ljust_padding(addresses)
 
-    assembly_strings = D.instructions_and_padding(instructions)
+    #assembly_strings = D.instructions_and_padding(instructions)
+    assembly_strings = list(map(D.legacy_instruction, instructions))
 
     prev = None
 

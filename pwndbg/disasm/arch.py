@@ -41,7 +41,7 @@ Emulation requires >1GB RAM being available on the system and ability to allocat
 # Even if this is disabled, branch instructions will still have targets printed
 pwndbg.gdblib.config.add_param(
     "disasm-annotations",
-    True,
+    False,  # changed from default True
     """
 Display annotations for instructions to provide context on operands and results
 """,

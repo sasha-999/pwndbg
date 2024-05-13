@@ -16,6 +16,7 @@ from pwndbg.disasm.instruction import PwndbgInstruction
 import pwndbg.gdblib.memory
 import pwndbg.gdblib.strings
 from pwndbg.color import light_green
+import pwndbg.color.memory as M
 import gdb
 
 capstone_branch_groups = {capstone.CS_GRP_CALL, capstone.CS_GRP_JUMP}
@@ -43,6 +44,7 @@ def one_instruction(ins: PwndbgInstruction) -> str:
     if is_call_or_jump:
         asm = asm.replace(ins.mnemonic, c.branch(ins.mnemonic), 1)
 
+    """
     for op in ins.operands[::-1]:
         addr = op.int
         if addr:
@@ -59,6 +61,7 @@ def one_instruction(ins: PwndbgInstruction) -> str:
         asm = on("✔ ") + asm
     else:
         asm = "  " + asm
+    """
 
     return asm
 
@@ -155,3 +158,86 @@ def instructions_and_padding(instructions: list[PwndbgInstruction]) -> list[str]
         final_result.append(asm)
 
     return final_result
+
+
+# this is a personal preference, but i dont like the annotations
+# and the disassembly has changed to include everything in annotations, like symbols
+# so just disabling annotations removes everything
+# so i made a dirty change to use the previous instruction()
+
+def legacy_instruction(ins):
+    asm = ins.asm_string
+    is_branch = set(ins.groups) & capstone_branch_groups
+
+    operands = [o for o in ins.operands if o.symbol]
+    if len(operands) == 1:
+        symbol = operands[0].symbol
+        symbol_addr = operands[0].before_value
+    else:
+        symbol = symbol_addr = None
+
+    # Highlight the current line if enabled
+    if pwndbg.gdblib.config.highlight_pc and ins.address == pwndbg.gdblib.regs.pc:
+        asm = C.highlight(asm)
+
+    # tl;dr is a branch?
+    if ins.target not in (None, ins.address + ins.size):
+        sym = pwndbg.gdblib.symbol.get(ins.target) or None
+        target = M.get(ins.target)
+        const = ins.target_const
+        hextarget = hex(ins.target)
+        hexlen = len(hextarget)
+
+        # If it's a constant expression, color it directly in the asm.
+        if const:
+            asm = f"{ljust_colored(asm, 36)} <{target}>"
+            asm = asm.replace(hex(ins.target), sym or target)
+
+        # It's not a constant expression, but we've calculated the target
+        # address by emulation or other means (for example showing ret instruction target)
+        elif sym:
+            asm = f"{ljust_colored(asm, 36)} <{target}; {sym}>"
+
+        # We were able to calculate the target, but there is no symbol
+        # name for it.
+        else:
+            asm += f"<{(target)}>"
+
+    # not a branch
+    elif symbol:
+        if is_branch and not ins.target:
+            asm = f"{asm} <{symbol}>"
+
+            # XXX: not sure when this ever happens
+            asm += "<-- file a pwndbg bug for this"
+        else:
+            inlined_sym = asm.replace(hex(symbol_addr), symbol)
+
+            # display symbol as mem text if no inline replacement was made
+            mem_text = symbol if inlined_sym == asm else None
+            asm = f"{ljust_colored(inlined_sym, 36)} <{M.get(symbol_addr, mem_text)}>"
+
+    # Style the instruction mnemonic if it's a branch instruction.
+    if is_branch:
+        asm = asm.replace(ins.mnemonic, c.branch(ins.mnemonic), 1)
+
+    for op in ins.operands[::-1]:
+        addr = None
+        if op.cs_op.type != capstone.CS_OP_REG or ins.address == pwndbg.gdblib.regs.pc:
+            addr = op.before_value
+        if addr:
+            length = pwndbg.gdblib.memory.strlen(addr)
+            if length == 0:
+                continue
+            string = pwndbg.gdblib.strings.get(addr, maxlen=0, maxread=length+1)
+            if string:
+                asm = "%s %s" % (ljust_colored(asm, 36), light_green(gdb.Value(string)))
+                break
+
+    # If we know the conditional is taken, mark it as taken.
+    if ins.condition == InstructionCondition.TRUE or ins.is_conditional_jump_taken:
+        asm = on("✔ ") + asm
+    else:
+        asm = "  " + asm
+
+    return asm
