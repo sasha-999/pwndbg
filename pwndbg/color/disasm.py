@@ -17,7 +17,6 @@ import pwndbg.gdblib.memory
 import pwndbg.gdblib.strings
 from pwndbg.color import light_green
 import pwndbg.color.memory as M
-import gdb
 
 capstone_branch_groups = {capstone.CS_GRP_CALL, capstone.CS_GRP_JUMP}
 
@@ -229,9 +228,13 @@ def legacy_instruction(ins):
             length = pwndbg.gdblib.memory.strlen(addr)
             if length == 0:
                 continue
-            string = pwndbg.gdblib.strings.get(addr, maxlen=0, maxread=length+1)
+            MAXLEN = 32
+            string = pwndbg.gdblib.strings.get(addr, maxlen=length, maxread=length+1)
             if string:
-                asm = "%s %s" % (ljust_colored(asm, 36), light_green(gdb.Value(string)))
+                string = repr(string[:MAXLEN])
+                if length > MAXLEN:
+                    string += " ..."
+                asm = "%s %s" % (ljust_colored(asm, 36), light_green(string))
                 break
 
     # If we know the conditional is taken, mark it as taken.
